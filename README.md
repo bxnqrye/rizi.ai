@@ -1,3 +1,5 @@
+STILL WORKING ON IT.
+
 # Rizi — AI Chatbot
 
 A personal AI chatbot built using Python, Streamlit, and Google's Gemini API.
