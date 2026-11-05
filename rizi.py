@@ -10,25 +10,29 @@ from google import genai
 
 import auth
 
-# ==================================================
-# CONFIGURATION
-# ==================================================
-
 MODEL = "gemini-3.8-flash"
 
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(env_path, override=True)
+PROJECT_DIR = Path(__file__).resolve().parent
+ENV_PATH = PROJECT_DIR / ".env"
+
+load_dotenv(ENV_PATH, override=True)
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 
+if not API_KEY:
+    try:
+        API_KEY = st.secrets["GEMINI_API_KEY"]
+    except (KeyError, FileNotFoundError):
+        API_KEY = None
+
 st.set_page_config(
-    page_title="Gemini Chat",
+    page_title="Rizi.ai",
     page_icon="💬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.session_state.setdefault("page", "home")  # home | signin | signup | app
+st.session_state.setdefault("page", "home")
 st.session_state.setdefault("user", None)
 
 
@@ -36,69 +40,103 @@ def go(page: str):
     st.session_state.page = page
     st.rerun()
 
-
-# ==================================================
-# DARK THEME + ACCENTS (your original CSS, unchanged)
-# ==================================================
-
 def inject_css():
-    css_path = Path(__file__).resolve().parent / "theme.css"
-    css = css_path.read_text(encoding="utf-8")
-    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+    css_path = PROJECT_DIR / "theme.css"
+
+    if css_path.exists():
+        css = css_path.read_text(encoding="utf-8")
+        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 def hide_sidebar():
     st.markdown(
-        "<style>[data-testid='stSidebar'],"
-        "[data-testid='collapsedControl']{display:none}</style>",
+        """
+        <style>
+        [data-testid="stSidebar"],
+        [data-testid="collapsedControl"] {
+            display: none;
+        }
+        </style>
+        """,
         unsafe_allow_html=True,
     )
-
-# ==================================================
-# HOME (landing)
-# ==================================================
 
 def home_page():
-    
-    st.markdown(
-        '<div class="h1">Jarvis</div>',
-        unsafe_allow_html=True,
-        )
+    hide_sidebar()
 
-    st.write("")
-    _, col1, col2, _ = st.columns([2, 1, 1, 2])
-    if col1.button("Sign up", type="primary", use_container_width=True):
-        go("signup")
-    if col2.button("Sign in", use_container_width=True):
-        go("signin")
+    logo_path = PROJECT_DIR / "assets" / "logo.png"
+
+    if logo_path.exists():
+        _, logo_col, _ = st.columns([1, 2, 1])
+        with logo_col:
+            st.image(str(logo_path), width=500)
 
     st.markdown(
-        '<div class="subtle" style="text-align:center;margin-top:1rem">'
-        "Powered by Google Gemini</div>",
+        '<div class="h1">Rizi</div>',
         unsafe_allow_html=True,
     )
 
+    st.write("")
 
-# ==================================================
-# AUTH PAGES
-# ==================================================
+    _, col1, col2, _ = st.columns([2, 1, 1, 2])
+
+    with col1:
+        if st.button(
+            "Sign up",
+            type="primary",
+            use_container_width=True,
+            key="home_signup_button",
+        ):
+            go("signup")
+
+    with col2:
+        if st.button(
+            "Sign in",
+            use_container_width=True,
+            key="home_signin_button",
+        ):
+            go("signin")
+
+    st.markdown(
+        """
+        <div class="subtle" style="text-align:center;margin-top:1rem">
+            Powered by Google Gemini
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def signin_page():
     hide_sidebar()
+
     _, mid, _ = st.columns([1, 2, 1])
+
     with mid:
         st.markdown(
-            '<div class="brand">Jarvis</div>',
+            '<div class="brand">Rizi</div>',
             unsafe_allow_html=True,
         )
         st.title("Sign in")
+
         with st.form("signin_form"):
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button(
-                "Sign in", type="primary", use_container_width=True
+            email = st.text_input(
+                "Email",
+                key="signin_email",
             )
+            password = st.text_input(
+                "Password",
+                type="password",
+                key="signin_password",
+            )
+            submitted = st.form_submit_button(
+                "Sign in",
+                type="primary",
+                use_container_width=True,
+                key="signin_submit",
+            )
+
         if submitted:
             user = auth.verify_user(email, password)
+
             if user:
                 st.session_state.user = user
                 go("app")
@@ -106,106 +144,228 @@ def signin_page():
                 st.error("Incorrect email or password.")
 
         c1, c2 = st.columns(2)
-        if c1.button("Create an account", use_container_width=True):
-            go("signup")
-        if c2.button("← Back", use_container_width=True):
-            go("home")
 
+        with c1:
+            if st.button(
+                "Create an account",
+                use_container_width=True,
+                key="signin_to_signup_button",
+            ):
+                go("signup")
+
+        with c2:
+            if st.button(
+                "← Back",
+                use_container_width=True,
+                key="signin_back_button",
+            ):
+                go("home")
+
+def process_signup(name, email, password, confirm_password):
+    if not name.strip():
+        return False, "Please enter your name."
+
+    if not email.strip():
+        return False, "Please enter your email."
+
+    if password != confirm_password:
+        return False, "Passwords do not match."
+
+    success, error_message = auth.create_user(
+        name,
+        email,
+        password,
+    )
+
+    if not success:
+        return False, error_message
+
+    user = auth.verify_user(email, password)
+
+    if not user:
+        return False, "Account created. Please sign in."
+
+    st.session_state.user = user
+    return True, None
 
 def signup_page():
     hide_sidebar()
+
     _, mid, _ = st.columns([1, 2, 1])
+
     with mid:
         st.markdown(
-            '<div class="brand">Jarvis</div>',
+            '<div class="brand">Rizi</div>',
             unsafe_allow_html=True,
         )
         st.title("Create your account")
+
         with st.form("signup_form"):
-            name = st.text_input("Name")
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            confirm = st.text_input("Confirm password", type="password")
-            submitted = st.form_submit_button(
-                "Sign up", type="primary", use_container_width=True
+            name = st.text_input("Name", key="signup_name")
+            email = st.text_input("Email", key="signup_email")
+            password = st.text_input(
+                "Password",
+                type="password",
+                key="signup_password",
             )
+            confirm_password = st.text_input(
+                "Confirm password",
+                type="password",
+                key="signup_confirm_password",
+            )
+
+            submitted = st.form_submit_button(
+                "Sign up",
+                type="primary",
+                use_container_width=True,
+                key="signup_submit",
+            )
+
         if submitted:
-            if password != confirm:
-                st.error("Passwords do not match.")
-            else:
-                ok, err = auth.create_user(name, email, password)
-                if ok:
-                    st.session_state.user = auth.verify_user(email, password)
-                    go("app")
-                else:
-                    st.error(err)
+            success, message = process_signup(
+                name,
+                email,
+                password,
+                confirm_password,
+            )
+
+            if success:
+                go("app")
+
+            st.error(message) if message else None
 
         c1, c2 = st.columns(2)
-        if c1.button("I already have an account", use_container_width=True):
-            go("signin")
-        if c2.button("← Back", use_container_width=True):
-            go("home")
+
+        with c1:
+            if st.button(
+                "I already have an account",
+                use_container_width=True,
+                key="signup_to_signin_button",
+            ):
+                go("signin")
+
+        with c2:
+            if st.button(
+                "← Back",
+                use_container_width=True,
+                key="signup_back_button",
+            ):
+                go("home")
 
 
 # ==================================================
-# CHAT (your original app)
+# CHAT HELPERS
 # ==================================================
+
+def create_gemini_client():
+    if not API_KEY:
+        return None
+
+    return genai.Client(api_key=API_KEY)
+
+
+def create_conversation():
+    chat = st.session_state.gemini_client.chats.create(model=MODEL)
+
+    return {
+        "id": str(uuid.uuid4()),
+        "title": "New chat",
+        "messages": [],
+        "chat": chat,
+    }
+
+
+def get_current_chat():
+    for conversation in st.session_state.conversations:
+        if conversation["id"] == st.session_state.current_id:
+            return conversation
+
+    conversation = create_conversation()
+    st.session_state.conversations.insert(0, conversation)
+    st.session_state.current_id = conversation["id"]
+    return conversation
+
+
+def start_new_chat():
+    conversation = create_conversation()
+    st.session_state.conversations.insert(0, conversation)
+    st.session_state.current_id = conversation["id"]
+
+
+def clear_current_chat():
+    conversation = get_current_chat()
+    conversation["messages"] = []
+    conversation["title"] = "New chat"
+    conversation["chat"] = st.session_state.gemini_client.chats.create(
+        model=MODEL
+    )
+
+def sign_out():
+    for key in (
+        "user",
+        "conversations",
+        "current_id",
+        "gemini_client",
+    ):
+        st.session_state.pop(key, None)
+
+    st.session_state.page = "home"
+    st.rerun()
+
+def render_copy_button(message_text: str, index: int):
+    safe_text = json.dumps(message_text).replace("<", "\\u003c")
+    component_key = f"copy_response_{index}_{uuid.uuid4().hex}"
+
+    components.html(
+        f"""
+        <button id="{component_key}"
+            style="
+                background:#141a16;
+                color:#FC0000;
+                border:1px solid #FC0000;
+                border-radius:7px;
+                padding:5px 12px;
+                cursor:pointer;
+                font-size:12px;
+            ">
+            Copy response
+        </button>
+        <span id="{component_key}_status"
+            style="color:#FC0000;font-size:12px;margin-left:8px">
+        </span>
+        <script>
+            const btn = document.getElementById("{component_key}");
+            const status = document.getElementById("{component_key}_status");
+            const text = {safe_text};
+
+            btn.addEventListener("click", async () => {{
+                try {{
+                    await navigator.clipboard.writeText(text);
+                    status.textContent = "Copied!";
+                }} catch (err) {{
+                    status.textContent = "Clipboard unavailable in this browser.";
+                }}
+            }});
+        </script>
+        """,
+        height=42,
+    )
 
 def chat_page():
     if not API_KEY:
         st.error(
-            "GEMINI_API_KEY was not found. "
-            "Check your .env file."
+            "GEMINI_API_KEY was not found. Add it to your .env file "
+            "or Streamlit secrets."
         )
         st.stop()
 
-    # Keep one client per Streamlit browser session.
     if "gemini_client" not in st.session_state:
-        st.session_state.gemini_client = genai.Client(api_key=API_KEY)
-
-    client = st.session_state.gemini_client
-
-    # ---------- conversation management ----------
-
-    def create_conversation():
-        chat = st.session_state.gemini_client.chats.create(model=MODEL)
-
-        return {
-            "id": str(uuid.uuid4()),
-            "title": "New chat",
-            "messages": [],
-            "chat": chat,
-        }
+        st.session_state.gemini_client = create_gemini_client()
 
     if "conversations" not in st.session_state:
-        first_chat = create_conversation()
-        st.session_state.conversations = [first_chat]
-        st.session_state.current_id = first_chat["id"]
-
-    def get_current_chat():
-        for conversation in st.session_state.conversations:
-            if conversation["id"] == st.session_state.current_id:
-                return conversation
-
-        new_chat = create_conversation()
-        st.session_state.conversations.append(new_chat)
-        st.session_state.current_id = new_chat["id"]
-        return new_chat
-
-    def start_new_chat():
-        conversation = create_conversation()
-        st.session_state.conversations.insert(0, conversation)
-        st.session_state.current_id = conversation["id"]
-
-    def clear_current_chat():
-        conversation = get_current_chat()
-        conversation["messages"] = []
-        conversation["title"] = "New chat"
-        conversation["chat"] = (
-            st.session_state.gemini_client.chats.create(model=MODEL)
-        )
-
-    # ---------- sidebar ----------
+        first_conversation = create_conversation()
+        st.session_state.conversations = [first_conversation]
+        st.session_state.current_id = first_conversation["id"]
 
     with st.sidebar:
         st.markdown(
@@ -218,12 +378,12 @@ def chat_page():
             "＋   New chat",
             type="primary",
             use_container_width=True,
+            key="sidebar_new_chat_button",
         ):
             start_new_chat()
             st.rerun()
 
         st.divider()
-
         st.markdown("**Chats**")
 
         for conversation in st.session_state.conversations:
@@ -235,11 +395,11 @@ def chat_page():
             if len(label) > 30:
                 label = label[:27] + "..."
 
-            prefix = "● " if selected else "  "
+            prefix = "● " if selected else "   "
 
             if st.button(
                 prefix + label,
-                key="history_" + conversation["id"],
+                key=f"history_{conversation['id']}",
                 use_container_width=True,
                 type="primary" if selected else "secondary",
             ):
@@ -248,24 +408,27 @@ def chat_page():
 
         st.divider()
 
-        if st.button("♲   Clear current chat", use_container_width=True):
+        if st.button(
+            "♲   Clear current chat",
+            use_container_width=True,
+            key="sidebar_clear_chat_button",
+        ):
             clear_current_chat()
             st.rerun()
 
         st.caption(f"Signed in as {st.session_state.user['name']}")
-        if st.button("Sign out", use_container_width=True):
-            for key in (
-                "user", "conversations", "current_id", "gemini_client"
-            ):
-                st.session_state.pop(key, None)
-            go("home")
+
+        if st.button(
+            "Sign out",
+            use_container_width=True,
+            key="sidebar_signout_button",
+        ):
+            sign_out()
 
         st.markdown(
             '<div class="subtle">Powered by Google Gemini</div>',
             unsafe_allow_html=True,
         )
-
-    # ---------- main chat ----------
 
     conversation = get_current_chat()
 
@@ -277,55 +440,16 @@ def chat_page():
             st.markdown(message["content"])
 
             if message["role"] == "assistant":
-                safe_text = json.dumps(
-                    message["content"]
-                ).replace("<", "\\u003c")
-
-                components.html(
-                    f"""
-                    <button id="copy"
-                        style="
-                            background:#141a16;
-                            color:#45f58a;
-                            border:1px solid #28372d;
-                            border-radius:7px;
-                            padding:5px 12px;
-                            cursor:pointer;
-                            font-size:12px;
-                        ">
-                        Copy response
-                    </button>
-                    <span id="status"
-                        style="color:#87958b;font-size:12px;margin-left:8px">
-                    </span>
-                    <script>
-                        const btn = document.getElementById("copy");
-                        const status = document.getElementById("status");
-                        const text = {safe_text};
-
-                        btn.addEventListener("click", async () => {{
-                            try {{
-                                await navigator.clipboard.writeText(text);
-                                status.textContent = "Copied!";
-                            }} catch (err) {{
-                                status.textContent =
-                                    "Clipboard unavailable in this browser.";
-                            }}
-                        }});
-                    </script>
-                    """,
-                    height=42,
-                )
+                render_copy_button(message["content"], index)
 
     prompt = st.chat_input("Message Gemini...")
 
     if prompt:
         if not conversation["messages"]:
-            conversation["title"] = prompt.strip().replace("\n", " ")
-            if len(conversation["title"]) > 40:
-                conversation["title"] = (
-                    conversation["title"][:37] + "..."
-                )
+            title = prompt.strip().replace("\n", " ")
+            conversation["title"] = (
+                title if len(title) <= 40 else title[:37] + "..."
+            )
 
         conversation["messages"].append({
             "role": "user",
@@ -339,7 +463,6 @@ def chat_page():
             with st.spinner("Gemini is thinking..."):
                 try:
                     response = conversation["chat"].send_message(prompt)
-
                     answer = (
                         response.text
                         or "Gemini returned no text response."
@@ -353,59 +476,21 @@ def chat_page():
                     })
 
                 except Exception as error:
-                    error_message = str(error)
-
-                    # Recover if the SDK client was closed.
-                    if "client has been closed" in error_message.lower():
-                        try:
-                            new_client = genai.Client(api_key=API_KEY)
-                            st.session_state.gemini_client = new_client
-
-                            new_chat = new_client.chats.create(
-                                model=MODEL
-                            )
-
-                            for old_message in conversation["messages"]:
-                                new_chat.send_message(
-                                    old_message["content"]
-                                )
-
-                            conversation["chat"] = new_chat
-                            response = new_chat.send_message(prompt)
-
-                            answer = (
-                                response.text
-                                or "Gemini returned no text response."
-                            )
-
-                            st.markdown(answer)
-
-                            conversation["messages"].append({
-                                "role": "assistant",
-                                "content": answer,
-                            })
-
-                        except Exception as retry_error:
-                            st.error(f"Request failed: {retry_error}")
-                    else:
-                        st.error(f"Request failed: {error}")
-
-
-# ==================================================
-# ROUTER
-# ==================================================
+                    st.error(f"Request failed: {error}")
 
 inject_css()
 
 page = st.session_state.page
 
-# The chat is only reachable when signed in.
 if page == "app" and not st.session_state.user:
     page = "signin"
+    st.session_state.page = "signin"
 
-{
+pages = {
     "home": home_page,
     "signin": signin_page,
     "signup": signup_page,
     "app": chat_page,
-}[page]()
+}
+
+pages.get(page, home_page)()
