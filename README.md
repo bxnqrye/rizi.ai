@@ -1,3 +1,5 @@
+Currently under development.
+
 # Rizi — AI Chatbot
 
 A personal AI chatbot built using Python, Streamlit, and Google's Gemini API.
@@ -55,6 +57,4 @@ API keys and local user databases are excluded from version control using `.giti
 
 ## Project Status
 
-Currently under development.
-
-@bxnarye
+@bxnqrye
